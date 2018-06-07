@@ -14,6 +14,9 @@ return [
     'api.confirmEmailAfterReg' => true, // Need to confirm email after registration
     'api.confirmNeededToLogin' => false, // TODO: it needs to be done
 
+    'api.passwordMinLength' => 6, //
+    'api.passwordMaxLength' => 20, //
+
 
     // SEND MAIL SETTINGS
     'mail.sendOnRegister' => true,

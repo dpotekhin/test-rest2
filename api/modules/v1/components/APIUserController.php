@@ -4,6 +4,7 @@ namespace app\modules\v1\components;
 use common\models\User;
 use Yii;
 //use app\modules\v1\models\APIUser;
+use yii\base\DynamicModel;
 use yii\db\Exception;
 
 /**
@@ -84,18 +85,20 @@ class APIUserController extends APIController
         $request = \Yii::$app->request;
         $post = $request->post();
 
-//        return $post['username'];
+        $model = DynamicModel::validateData([
+            'username' => $post['username'],
+            'email' => $post['email'],
+            'password' => $post['password'],
+        ], [
+            [['username', 'email', 'password'], 'required'],
+            [['username', 'email'], 'string', 'min' => 3, 'max' => 128],
+            ['email', 'email'],
+            [['password'], 'string', 'min' => $app_params['api.passwordMinLength'], 'max' => $app_params['api.passwordMaxLength'] ],
+        ]);
 
-//        if (!$post) {
-//            $this->addError('required:params', 'params is reqiured');
-//            return $this->returnErrors();
-//        }
-
-        if( !$post['username'] ) $this->addError( 'required:username', 'username is required' );
-        if( !$post['email'] ) $this->addError( 'required:email', 'email is required' );
-        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
-
-        if( count($this->errors) ) return $this->returnErrors();
+        if ($model->hasErrors()) {
+            return $this->returnErrors( $model->errors );
+        }
 
         // is the name unique
         if( User::findOne(["username" => $post['username']]) ){
@@ -218,9 +221,9 @@ class APIUserController extends APIController
         if( count($this->errors) ) return $this->returnErrors();
 
         $user = User::findOne([
-            "email_confirm_token" => $post['token'],
-            'status' => User::STATUS_ACTIVE,
-            'email_confirmed' => false,
+            "email_confirm_token" => $post['token'], // users with email confirm token
+            'status' => User::STATUS_ACTIVE, // active users only
+            'email_confirmed' => false, // without confirmed email
         ]);
 
         if( !$user ){
