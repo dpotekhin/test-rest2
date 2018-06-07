@@ -12,8 +12,9 @@ use yii\db\Exception;
 class APIUserController extends APIController
 {
     public $modelClass = 'app\modules\v1\models\APIUser';
-    public $allowed_user_attributes = ['id','username', 'email', 'status'];
 
+    public $allowed_user_attributes = ['id','username', 'email', 'status']; // keys for user attributes filtration
+    public $auth_after_reg = !false;
 
     public function actions()
     {
@@ -46,10 +47,16 @@ class APIUserController extends APIController
     public function getUserData(){
         if( Yii::$app->user->identity ) {
             $user = (array)Yii::$app->user->identity->attributes;
-            if( $this->allowed_user_attributes ) $user = Utils::array_filter_key( $user, $this->allowed_user_attributes );
+            $user = $this->cleanupUserData( $user );
             return $user;
         }
         return null;
+    }
+
+    public function cleanupUserData( $userdata ){
+        if( !$userdata ) return null;
+        if( $this->allowed_user_attributes ) return Utils::array_filter_key( $userdata, $this->allowed_user_attributes );
+        return $userdata;
     }
 
 
@@ -105,7 +112,12 @@ class APIUserController extends APIController
             return $this->returnErrors();
         }
 
-        return $this->returnSuccess(['user' => $user ]);
+        // Auth User
+        if( $auth_after_reg ){
+
+        }
+
+        return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ) ]);
 
     }
 

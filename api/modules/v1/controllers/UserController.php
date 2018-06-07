@@ -15,7 +15,7 @@ class UserController extends APIUserController
 {
 
 //    public $allowed_user_attributes = null; // disable user attributes filtering
-
+//    public $auth_after_reg = false;
 
     public function returnErrors()
     {
