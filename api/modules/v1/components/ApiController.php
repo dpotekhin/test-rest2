@@ -10,7 +10,7 @@ use yii\web\Response;
  * API Base Controller
  * All controllers within API app must extend this controller!
  */
-class ApiController extends ActiveController
+class APIController extends ActiveController
 {
 
     public function behaviors()
@@ -49,6 +49,7 @@ class ApiController extends ActiveController
     }
 
 
+    // RETURN ERRORS
     public $errors = array();
 
     public function addError( $key, $message ){
@@ -57,15 +58,21 @@ class ApiController extends ActiveController
         $this->errors[$key] = $message;
     }
 
-    public function getErrors(){
+    public function returnErrors(){
         if( count( $this->errors ) ){
             return [
                 "error" => true,
                 "error_messages" => $this->errors,
             ];
         }else{
-            return ["success" => true];
+            return $this->returnSuccess();
         }
+    }
+
+    // RETURN SUCCESS
+    public function returnSuccess( $answer = null ){
+        if( isset($answer) ) return array_merge( ['success' => true ], $answer );
+        return ['success' => true ];
     }
 
 
