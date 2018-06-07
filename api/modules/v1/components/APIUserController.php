@@ -13,7 +13,14 @@ class APIUserController extends APIController
 {
     public $modelClass = 'app\modules\v1\models\APIUser';
 
-    public $allowed_user_attributes = ['id','username', 'email', 'status']; // keys for user attributes filtration
+    // keys for user attributes filtration
+    public $allowed_user_attributes = [
+        'id',
+        'username',
+        'email',
+        'status',
+        'email_confirmed'
+    ];
 
     public function actions()
     {
@@ -34,26 +41,46 @@ class APIUserController extends APIController
     {
         $behaviors = parent::behaviors();
 
-        $behaviors['authenticator']['except'] = array_merge($behaviors['authenticator']['except'], [
-            'login',
-            'logout',
-            'auth',
-            'reg',
-            'recover-password',
-            'reset-password'
-        ]);
+        if( Yii::$app->params['api.authWithToken'] ) {
+
+            $behaviors['authenticator']['except'] = array_merge($behaviors['authenticator']['except'], [
+                'reg',
+                'confirm-email-send',
+                'confirm-email',
+                'login',
+                'auth',
+                'logout',
+                'recover-password',
+                'reset-password',
+            ]);
+        }
 
         return $behaviors;
     }
 
-
-
-
+    public function methods()
+    {
+        $methods = parent::methods();
+        $methods = array_merge( $methods, [
+            'reg' => ['username','password'],
+            'confirm-email-send' => ['-- authorized only --'],
+            'confirm-email' => ['token'],
+            'login' => ['username', 'password'],
+            'auth' => ['-- authorized only --'],
+            'edit' => ['username', 'email', 'password', '-- authorized only --'],
+            'logout' => ['-- authorized only --'],
+            'recover-password' => ['email'],
+            'reset-password' => ['password','token'],
+        ]);
+        return $methods;
+    }
 
 
     // VVVVVVVVVVVVVVV---   REG   ---VVVVVVVVVVVVVVVV
     public function actionReg()
     {
+        $app_params = Yii::$app->params;
+
         $request = \Yii::$app->request;
         $post = $request->post();
 
@@ -68,9 +95,7 @@ class APIUserController extends APIController
         if( !$post['email'] ) $this->addError( 'required:email', 'email is required' );
         if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
 
-        if( count($this->errors) ){
-            return $this->returnErrors();
-        }
+        if( count($this->errors) ) return $this->returnErrors();
 
         // is the name unique
         if( User::findOne(["username" => $post['username']]) ){
@@ -87,8 +112,13 @@ class APIUserController extends APIController
         $user->email = $post['email'];
         $user->setPassword( $post['password'] );
         $user->generateAuthKey();
-//        $user->password_hash = Yii::$app->getSecurity()->generatePasswordHash($post['password']);
 
+        // Setup email confirmation
+        if( $app_params['api.confirmEmailAfterReg'] ){
+            $user->email_confirm_token = Yii::$app->security->generateRandomString() . '_' . time();
+        }
+
+        // Save
         try{
             $user->save(false);
         }catch(Exception $e){
@@ -99,24 +129,127 @@ class APIUserController extends APIController
         }
 
         // Send Mail
-        if( Yii::$app->params['mail.sendOnRegister'] ){
+        if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
+
             $this->senMail(
                 $user->email,
                 'Registration on ' . Yii::$app->name,
                 ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
-                ['user' => [] ]
+                ['user' => $user ]
             );
-        }
-
-        // Auth User
-        if( Yii::$app->params['mail.sendOnRegister'] ){
 
         }
+
+        // Auth User // TODO: implement this
+//        if( Yii::$app->params['mail.sendOnRegister'] ){
+//
+//        }
 
         return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ) ]);
+//        return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ), 'email_confirm_token' => $user->email_confirm_token  ]); // !!! DEBUG
 
     }
     // ^^^^^^^^^^^^^^^---   REG   ---^^^^^^^^^^^^^^^^
+
+
+
+
+    // VVVVVVVVVVVVVVV---   CONFIRM EMAIL SEND   ---VVVVVVVVVVVVVVVV
+    public function actionConfirmEmailSend()
+    {
+        $app_params = Yii::$app->params;
+
+        $request = \Yii::$app->request;
+        $post = $request->post();
+
+        // USER
+        $identity = Yii::$app->user->identity;
+
+        if( !$identity ){
+            return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
+        }
+
+        // is confirmation required
+        if( !$app_params['api.confirmEmailAfterReg'] ){
+            return $this->returnErrors(['email_confirm_is_not_required' => 'email confirmation is not required']);
+        }
+
+        // is user already confirm his email
+        if( $identity->email_confirmed ) {
+            return $this->returnErrors(['email_is_confirmed' => 'email is confirmed already']);
+        }
+
+        // Setup email confirmation
+        $identity->email_confirm_token = Yii::$app->security->generateRandomString() . '_' . time();
+
+        // Save
+        try{
+            $identity->save(false);
+        }catch(Exception $e){
+            return $this->returnErrors(['db_error' => $e->errorInfo]);
+        }
+
+        // Send Mail
+        if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
+            $this->senMail(
+                $identity->email,
+                'Registration on ' . Yii::$app->name,
+                ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
+                ['user' => $identity ]
+            );
+        }
+
+        return $this->returnSuccess([ 'message' => 'email confirmation sended to ' . $identity->email ]);
+    }
+    // ^^^^^^^^^^^^^^^---   CONFIRM EMAIL SEND   ---^^^^^^^^^^^^^^^^
+
+
+
+
+
+    // VVVVVVVVVVVVVVV---   CONFIRM EMAIL    ---VVVVVVVVVVVVVVVV
+    public function actionConfirmEmail()
+    {
+        $request = \Yii::$app->request;
+        $post = $request->post();
+
+        if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
+
+        if( count($this->errors) ) return $this->returnErrors();
+
+        $user = User::findOne([
+            "email_confirm_token" => $post['token'],
+            'status' => User::STATUS_ACTIVE,
+            'email_confirmed' => false,
+        ]);
+
+        if( !$user ){
+            return $this->returnErrors( ['not_found:user' => 'user is not found' ] );
+        }
+
+        if( !$this->isPasswordResetTokenValid( $post['token'] ) ){
+            return $this->returnErrors( ['token_expired' => 'token expired' ] );
+        }
+
+        $user->email_confirm_token = null;
+        $user->email_confirmed = true;
+        if( !$user->save() ){
+            return $this->returnErrors([ 'db_error' => $e->errorInfo ]);
+        }
+
+        // send mail
+//        $this->senMail(
+//            $user->email,
+//            'Password is resetted for ' . Yii::$app->name,
+//            ['html' => 'passwordResetted-API-html', 'text' => 'passwordResetted-API-text'],
+//            ['user' => $user]
+//        );
+
+//        return $this->returnSuccess(['user' => array($user->attributes)]);// !!! DEBUG ONLY
+        return $this->returnSuccess();
+    }
+    // ^^^^^^^^^^^^^^^---   CONFIRM EMAIL   ---^^^^^^^^^^^^^^^^
+
 
 
 
@@ -142,21 +275,27 @@ class APIUserController extends APIController
             return $this->returnErrors();
         }
 
-        $identity = User::findOne(['username' => $post['username'] ]);
+        $identity = User::findOne([
+            'username' => $post['username'],
+        ]);
 
         if( !$identity ){
             return $this->returnErrors(['not_found:user' => 'user is not found']);
         }
 
-
-//        return [ 'password' => $post['password'], "hash" =>  $identity['password_hash'] ];
-
-        if ( Yii::$app->getSecurity()->validatePassword( $post['password'], $identity['password_hash'] )) {
-            Yii::$app->user->login($identity);
-            return $this->returnSuccess( ['user' => $this->getUserData()] );
+        // Check password
+        if ( !Yii::$app->getSecurity()->validatePassword( $post['password'], $identity['password_hash'] )) {
+            return $this->returnErrors(['wrong_login_or_password' => 'wrong login or password']);
         }
 
-        return $this->returnErrors(['wrong_login_or_password' => 'wrong login or password']);
+        // Check user status
+        if($identity->status !== User::STATUS_ACTIVE){
+            return $this->returnErrors([ 'user:not_active' => 'user is inactive' ]);
+        }
+
+        Yii::$app->user->login($identity);
+
+        return $this->returnSuccess( ['user' => $this->getUserData()] );
 
     }
     // ^^^^^^^^^^^^^^^---   LOGIN   ---^^^^^^^^^^^^^^^^
@@ -174,7 +313,7 @@ class APIUserController extends APIController
             return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
         }
 
-        return ['success' => true, 'user' => $this->getUserData() ];
+        return $this->returnSuccess(['user' => $this->getUserData() ]);
     }
     // ^^^^^^^^^^^^^^^---   AUTH   ---^^^^^^^^^^^^^^^^
 
@@ -219,7 +358,10 @@ class APIUserController extends APIController
             return $this->returnErrors();
         }
 
-        $user = User::findOne(['email' => $post['email'], 'status' => User::STATUS_ACTIVE ]);
+        $user = User::findOne([
+            'email' => $post['email'],
+            'status' => User::STATUS_ACTIVE
+        ]);
 
         if( !$user ){
             return $this->returnErrors(['not_found:user' => "user with email: " . $post['email'] . " is not found"]);

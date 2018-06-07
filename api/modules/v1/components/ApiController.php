@@ -1,34 +1,38 @@
 <?php
 namespace app\modules\v1\components;
 
+use Yii;
 use yii\filters\auth\QueryParamAuth;
 use yii\filters\Cors;
-use yii\rest\ActiveController;
-use yii\web\Response;
+//use yii\rest\ActiveController;
+use yii\rest\Controller;
+//use yii\web\Response;
 
 /**
  * API Base Controller
  * All controllers within API app must extend this controller!
  */
-class APIController extends ActiveController
+class APIController extends Controller
 {
 
     public function behaviors()
     {
         $behaviors = parent::behaviors();
 
-        // add CORS filter
-        $behaviors['corsFilter'] = [
-            'class' => Cors::className(),
-        ];
+        if( Yii::$app->params['api.authWithToken'] ) {
+            // add CORS filter
+            $behaviors['corsFilter'] = [
+                'class' => Cors::className(),
+            ];
 
-        // add QueryParamAuth for authentication
-        $behaviors['authenticator'] = [
-            'class' => QueryParamAuth::className(),
-        ];
+            // add QueryParamAuth for authentication
+            $behaviors['authenticator'] = [
+                'class' => QueryParamAuth::className(),
+            ];
 
-        // avoid authentication on CORS-pre-flight requests (HTTP OPTIONS method)
-        $behaviors['authenticator']['except'] = ['options'];
+            // avoid authentication on CORS-pre-flight requests (HTTP OPTIONS method)
+            $behaviors['authenticator']['except'] = ['options'];
+        }
 
         return $behaviors;
     }
@@ -49,6 +53,31 @@ class APIController extends ActiveController
     }
 
 
+
+    // CUSTOM
+
+    public function methods(){
+        return [
+            'info' => ['dev_token'],
+        ];
+    }
+
+
+    // VVVVVVVVVVVVVVV---   INFO   ---VVVVVVVVVVVVVVVV
+    public function actionInfo()
+    {
+        $request = Yii::$app->request;
+        $post = $request->post();
+
+        if( $post['dev_token'] != Yii::$app->params['api.info.dev_token'] ){
+            return $this->returnErrors([ 'required:dev_token' => 'developer token is required' ]);
+        }
+
+        return $this->returnSuccess([ 'methods' => $this->methods() ]);
+    }
+    // ^^^^^^^^^^^^^^^---   INFO   ---^^^^^^^^^^^^^^^^
+
+
     // RETURN ERRORS
     public $errors = array();
 
@@ -60,7 +89,7 @@ class APIController extends ActiveController
 
     public function returnErrors( $messages = null ){
 
-        $this->errors = Utils::merge_associative_arrays( $this->errors, $messages );
+        if( $messages ) $this->errors = Utils::merge_associative_arrays( $this->errors, $messages );
 
         if( count( $this->errors ) ){
             return [

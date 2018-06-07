@@ -14,6 +14,8 @@ use yii\web\IdentityInterface;
  * @property string $username
  * @property string $password_hash
  * @property string $password_reset_token
+ * @property string $email_confirm_token
+ * @property string $email_confirmed
  * @property string $email
  * @property string $auth_key
  * @property integer $status
@@ -25,7 +27,6 @@ class User extends ActiveRecord implements IdentityInterface
 {
     const STATUS_DELETED = 0;
     const STATUS_ACTIVE = 10;
-
 
     /**
      * {@inheritdoc}
