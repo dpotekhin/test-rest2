@@ -23,4 +23,17 @@ class Utils
         );
     }
 
+    static public function merge_associative_arrays(array $array, array $add_array)
+    {
+        if( !is_array($add_array) || !count($add_array) ) return $array;
+
+        foreach ($add_array as $key => $item)
+        {
+            $array[$key] = $item;
+        }
+
+        return $array;
+    }
+
+
 }

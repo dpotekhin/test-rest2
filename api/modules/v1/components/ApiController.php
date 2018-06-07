@@ -58,7 +58,10 @@ class APIController extends ActiveController
         $this->errors[$key] = $message;
     }
 
-    public function returnErrors(){
+    public function returnErrors( $messages = null ){
+
+        $this->errors = Utils::merge_associative_arrays( $this->errors, $messages );
+
         if( count( $this->errors ) ){
             return [
                 "error" => true,

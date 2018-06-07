@@ -14,7 +14,6 @@ class APIUserController extends APIController
     public $modelClass = 'app\modules\v1\models\APIUser';
 
     public $allowed_user_attributes = ['id','username', 'email', 'status']; // keys for user attributes filtration
-    public $auth_after_reg = !false;
 
     public function actions()
     {
@@ -35,7 +34,14 @@ class APIUserController extends APIController
     {
         $behaviors = parent::behaviors();
 
-        $behaviors['authenticator']['except'] = array_merge($behaviors['authenticator']['except'], ['login', 'logout', 'auth', 'reg']);
+        $behaviors['authenticator']['except'] = array_merge($behaviors['authenticator']['except'], [
+            'login',
+            'logout',
+            'auth',
+            'reg',
+            'recover-password',
+            'reset-password'
+        ]);
 
         return $behaviors;
     }
@@ -43,26 +49,9 @@ class APIUserController extends APIController
 
 
 
-    //
-    public function getUserData(){
-        if( Yii::$app->user->identity ) {
-            $user = (array)Yii::$app->user->identity->attributes;
-            $user = $this->cleanupUserData( $user );
-            return $user;
-        }
-        return null;
-    }
-
-    public function cleanupUserData( $userdata ){
-        if( !$userdata ) return null;
-        if( $this->allowed_user_attributes ) return Utils::array_filter_key( $userdata, $this->allowed_user_attributes );
-        return $userdata;
-    }
 
 
-
-
-    // REG
+    // VVVVVVVVVVVVVVV---   REG   ---VVVVVVVVVVVVVVVV
     public function actionReg()
     {
         $request = \Yii::$app->request;
@@ -70,14 +59,14 @@ class APIUserController extends APIController
 
 //        return $post['username'];
 
-        if (!$post) {
-            $this->addError('request', 'no registration data');
-            return $this->returnErrors();
-        }
+//        if (!$post) {
+//            $this->addError('required:params', 'params is reqiured');
+//            return $this->returnErrors();
+//        }
 
-        if( !$post['username'] ) $this->addError( 'username', 'username is required' );
-        if( !$post['email'] ) $this->addError( 'email', 'email is required' );
-        if( !$post['password'] ) $this->addError( 'password', 'password is required' );
+        if( !$post['username'] ) $this->addError( 'required:username', 'username is required' );
+        if( !$post['email'] ) $this->addError( 'required:email', 'email is required' );
+        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
 
         if( count($this->errors) ){
             return $this->returnErrors();
@@ -85,14 +74,12 @@ class APIUserController extends APIController
 
         // is the name unique
         if( User::findOne(["username" => $post['username']]) ){
-            $this->addError('username', 'username is used already');
-            return $this->returnErrors();
+            return $this->returnErrors(['is_used:username' => 'username is used already']);
         }
 
         // is the email unique
         if( User::findOne(["email" => $post['email']]) ){
-            $this->addError('email', 'email is used already');
-            return $this->returnErrors();
+            return $this->returnErrors(['is_used:email' => 'email is used already']);
         }
 
         $user = new User();
@@ -108,24 +95,33 @@ class APIUserController extends APIController
 //            throw new \yii\web\HttpException(405, 'Error saving model');
 //            $this->addError('request', 'DataBase error');
 //            return $this->getErrors();
-            $this->addError( 'db', $e->errorInfo );
-            return $this->returnErrors();
+            return $this->returnErrors(['db_error' => $e->errorInfo]);
+        }
+
+        // Send Mail
+        if( Yii::$app->params['mail.sendOnRegister'] ){
+            $this->senMail(
+                $user->email,
+                'Registration on ' . Yii::$app->name,
+                ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
+                ['user' => [] ]
+            );
         }
 
         // Auth User
-        if( $auth_after_reg ){
+        if( Yii::$app->params['mail.sendOnRegister'] ){
 
         }
 
         return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ) ]);
 
     }
+    // ^^^^^^^^^^^^^^^---   REG   ---^^^^^^^^^^^^^^^^
 
 
 
 
-
-    // LOGIN
+    // VVVVVVVVVVVVVVV---   LOGIN   ---VVVVVVVVVVVVVVVV
     public function actionLogin()
     {
         $request = \Yii::$app->request;
@@ -133,14 +129,14 @@ class APIUserController extends APIController
 
 //        return $post['username'];
 
-        if( !$post ) {
-            $this->addError( 'request', 'no login data' );
-            return $this->returnErrors();
-        }
+//        if( !$post ) {
+//            $this->addError('required:params', 'params is reqiured');
+//            return $this->returnErrors();
+//        }
 
-        if( !$post['username'] ) $this->addError( 'username', 'username is required' );
+        if( !$post['username'] ) $this->addError( 'required:username', 'username is required' );
 //        if( !$post['email'] ) $this->addError( 'email', 'email is required' );
-        if( !$post['password'] ) $this->addError( 'password', 'password is required' );
+        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
 
         if( count($this->errors) ){
             return $this->returnErrors();
@@ -149,8 +145,7 @@ class APIUserController extends APIController
         $identity = User::findOne(['username' => $post['username'] ]);
 
         if( !$identity ){
-            $this->addError( 'request', 'user not found' );
-            return $this->returnErrors();
+            return $this->returnErrors(['not_found:user' => 'user is not found']);
         }
 
 
@@ -161,49 +156,193 @@ class APIUserController extends APIController
             return $this->returnSuccess( ['user' => $this->getUserData()] );
         }
 
-        $this->addError( 'request', 'wrong login or password' );
-        return $this->returnErrors();
+        return $this->returnErrors(['wrong_login_or_password' => 'wrong login or password']);
 
     }
+    // ^^^^^^^^^^^^^^^---   LOGIN   ---^^^^^^^^^^^^^^^^
 
 
 
 
 
-
-    // AUTH
+    // VVVVVVVVVVVVVVV---   AUTH   ---VVVVVVVVVVVVVVVV
     public function actionAuth()
     {
         $identity = Yii::$app->user->identity;
 
         if( !$identity ){
-            $this->addError( 'request', 'user is not logged in' );
-            return $this->returnErrors();
+            return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
         }
 
         return ['success' => true, 'user' => $this->getUserData() ];
     }
+    // ^^^^^^^^^^^^^^^---   AUTH   ---^^^^^^^^^^^^^^^^
 
 
 
-
-
-    // LOGOUT
+    // VVVVVVVVVVVVVVV---   LOGOUT   ---VVVVVVVVVVVVVVVV
     public function actionLogout()
     {
 
         $identity = Yii::$app->user->identity;
 
+        // !!! DEBUG !!!
+//        $this->senMail(
+//            $user->email,
+//            (Yii::$app->params['mail.password_reseted'])(),
+//            ['html' => 'passwordResetToken-API-html', 'text' => 'passwordResetToken-API-text'],
+//            ['user' => [] ]
+//        );
+        // !!! DEBUG !!!
+
         if( !$identity ){
-            $this->addError( 'request', 'user is not logged in' );
-            return $this->returnErrors();
+            return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
         }
 
         Yii::$app->user->logout();
         return $this->returnSuccess();
     }
+    // ^^^^^^^^^^^^^^^---   LOGOUT   ---^^^^^^^^^^^^^^^^
 
 
+
+
+    // VVVVVVVVVVVVVVV---   RECOVER PASSWORD   ---VVVVVVVVVVVVVVVV
+    public function actionRecoverPassword()
+    {
+        $request = \Yii::$app->request;
+        $post = $request->post();
+
+        if( !$post['email'] ) $this->addError( 'required:email', 'email is required' );
+
+        if( count($this->errors) ){
+            return $this->returnErrors();
+        }
+
+        $user = User::findOne(['email' => $post['email'], 'status' => User::STATUS_ACTIVE ]);
+
+        if( !$user ){
+            return $this->returnErrors(['not_found:user' => "user with email: " . $post['email'] . " is not found"]);
+        }
+
+        // generate reset token
+        if (!User::isPasswordResetTokenValid($user->password_reset_token)) {
+            $user->generatePasswordResetToken();
+            if (!$user->save()) {
+                return $this->returnErrors([ 'db_error' => $e->errorInfo ]);
+            }
+        }
+
+        // send mail
+        if( $this->senMail(
+           $post['email'],
+           'Password reset for ' . Yii::$app->name,
+           ['html' => 'passwordResetToken-API-html', 'text' => 'passwordResetToken-API-text'],
+           ['user' => $user]
+        )
+       ){
+            return $this->returnSuccess(["user" => array($user->attributes)]); // !!! DEBUG ONLY
+            return $this->returnSuccess();
+        }
+
+        return $this->returnErrors(["sendmail:error" => 'mailer error']);
+
+    }
+    // ^^^^^^^^^^^^^^^^^^---   RECOVER PASSWORD   ---^^^^^^^^^^^^^^^^^^
+
+
+
+
+    // VVVVVVVVVVVVVVV---   PASSWORD RESET   ---VVVVVVVVVVVVVVVV
+    public function actionResetPassword()
+    {
+        $request = \Yii::$app->request;
+        $post = $request->post();
+
+        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
+        if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
+
+        if( count($this->errors) ) return $this->returnErrors();
+
+//        return $this->returnSuccess([ "password" => $post['password'], "token" => $post['token'] ]);
+
+        $user = User::findOne([
+            "password_reset_token" => $post['token'],
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        if( !$user ){
+            return $this->returnErrors( ['not_found:user' => 'user is not found' ] );
+        }
+
+        if( !$this->isPasswordResetTokenValid( $post['token'] ) ){
+            return $this->returnErrors( ['token_expired' => 'token expired' ] );
+        }
+
+        $user->password_reset_token = null;
+        $user->setPassword( $post['password'] );
+        $user->generateAuthKey();
+        if( !$user->save() ){
+            return $this->returnErrors([ 'db_error' => $e->errorInfo ]);
+        }
+
+        // send mail
+        $this->senMail(
+            $user->email,
+            'Password is resetted for ' . Yii::$app->name,
+            ['html' => 'passwordResetted-API-html', 'text' => 'passwordResetted-API-text'],
+            ['user' => $user]
+        );
+
+//        return $this->returnSuccess(['user' => array($user->attributes)]);// !!! DEBUG ONLY
+        return $this->returnSuccess();
+
+    }
+
+
+    public function isPasswordResetTokenValid($token)
+    {
+
+        if (empty($token)) {
+            return false;
+        }
+
+        $timestamp = (int) substr($token, strrpos($token, '_') + 1);
+        $expire = Yii::$app->params['user.passwordResetTokenExpire'];
+        return $timestamp + $expire >= time();
+    }
+    // ^^^^^^^^^^^^^^^---   PASSWORD RESET   ---^^^^^^^^^^^^^^^^
+
+
+
+
+    // VVVVVVVVVVVVVVV---   SUPPORT METHODS   ---VVVVVVVVVVVVVVVV
+    // USER DATA
+    public function getUserData(){
+        if( Yii::$app->user->identity ) {
+            $user = (array)Yii::$app->user->identity->attributes;
+            $user = $this->cleanupUserData( $user );
+            return $user;
+        }
+        return null;
+    }
+
+    public function cleanupUserData( $userdata ){
+        if( !$userdata ) return null;
+        if( $this->allowed_user_attributes ) return Utils::array_filter_key( $userdata, $this->allowed_user_attributes );
+        return $userdata;
+    }
+
+    // SEND MAIL
+    public function senMail( $to, $subject, $template, $data ){
+        return Yii::$app
+            ->mailer
+            ->compose( $template, $data )
+            ->setFrom([Yii::$app->params['supportEmail'] => Yii::$app->name . ' robot'])
+            ->setTo( $to )
+            ->setSubject( $subject )
+            ->send();
+    }
 
 
 }
