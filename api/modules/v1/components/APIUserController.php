@@ -13,11 +13,6 @@ use yii\db\Exception;
 class APIUserController extends APIController
 {
 
-    const USER_NOT_LOGGED_IN = 'user_not_logged_in';
-    const USER_NOT_FOUND = 'user_not_found';
-    const USER_NOT_ACTIVE = 'user_not_active';
-
-
     public $modelClass = 'app\modules\v1\models\APIUser';
 
     // keys for user attributes filtration
@@ -209,7 +204,7 @@ class APIUserController extends APIController
                 ['user' => $user ]
             );
 
-            $response = array_merge( $response, [ "message" => $locals['mail:confirm_email_sended'] ] );
+            $response = array_merge( $response, [ "message" => $locals['mail:confirm_email_sent'] ] );
 
         }
 
@@ -234,11 +229,7 @@ class APIUserController extends APIController
         //
 
         // USER
-        $user = Yii::$app->user->identity;
-
-        if( !$user ){
-            return $this->returnErrors([ self::USER_NOT_LOGGED_IN => $locals['user:not_logged_in'] ]);
-        }
+        if(  !($user = $this->getUser()) ) return $this->returnErrors();
 
         // is confirmation required
         if( !$app_params['api.confirmEmailAfterReg'] ){
@@ -267,25 +258,32 @@ class APIUserController extends APIController
 
         $user->refresh();
 
-        // Send Mail
-        if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
-            $this->sendMail(
-                $user->email,
-                'Registration on ' . Yii::$app->name,
-                ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
-                ['user' => $user ]
-            );
-        }
-
         $response = [
-            'message' => str_replace( '{email}', $user->email,  $locals['mail:confirm_email_sended'] ),
             'token_send_timeout' => $app_params['api.tokenSendTimeout'],
         ];
 
-        if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
-            $response = array_merge( $response, ["email_confirm_token" => $user->email_confirm_token] );
+        // Send Mail
+        if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
+
+            if( $this->sendMail(
+                    $user->email,
+                    'Registration on ' . Yii::$app->name,
+                    ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
+                    ['user' => $user ]
+                )
+            ){
+
+                if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
+                    $response = array_merge( $response, ["email_confirm_token" => $user->email_confirm_token] );
+
+                return $this->returnSuccess( array_merge( $response, [ 'message' => str_replace( '{email}', $user->email,  $locals['mail:confirm_email_sent'] ) ] ) );
+            }
+
+            return $this->returnErrors([ 'mail_send_error' => $locals['mail:send_error'] ]);
+        }
 
         return $this->returnSuccess( $response );
+
     }
     // ^^^^^^^^^^^^^^^---   CONFIRM EMAIL SEND   ---^^^^^^^^^^^^^^^^
 
@@ -311,7 +309,7 @@ class APIUserController extends APIController
         ]);
 
         if( !$user ){
-            return $this->returnErrors( [self::USER_NOT_FOUND => $locals['user:not_found']] );
+            return $this->returnErrors( [APIController::USER_NOT_FOUND => $locals['user:not_found']] );
         }
 
         if( !$this->isTokenNotExpired( $post['token'] ) ){
@@ -366,7 +364,7 @@ class APIUserController extends APIController
         ]);
 
         if( !$user ){
-            return $this->returnErrors([ self::USER_NOT_FOUND => $locals['user:not_found'] ]);
+            return $this->returnErrors([ APIController::USER_NOT_FOUND => $locals['user:not_found'] ]);
         }
 
         // Check password
@@ -376,7 +374,7 @@ class APIUserController extends APIController
 
         // Check user status
         if($user->status !== User::STATUS_ACTIVE){
-            return $this->returnErrors([ self::USER_NOT_ACTIVE => $locals['user:not_active'] ]);
+            return $this->returnErrors([ APIController::USER_NOT_ACTIVE => $locals['user:not_active'] ]);
         }
 
         Yii::$app->user->login($user);
@@ -425,45 +423,58 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   RECOVER PASSWORD   ---VVVVVVVVVVVVVVVV
     public function actionRecoverPassword()
     {
+        $app_params = Yii::$app->params;
         $post = $this->POST;
+        $locals = $this->getLocals();
+        //
 
-        if( !$post['email'] ) $this->addError( 'required:email', 'email is required' );
-
-        if( count($this->errors) ){
-            return $this->returnErrors();
-        }
-
-        $user = User::findOne([
+        $model = DynamicModel::validateData([
             'email' => $post['email'],
-            'status' => User::STATUS_ACTIVE
+        ], [
+            [['email'], 'required', 'message' => $locals['input_empty:email']],
+            ['email', 'email'],
         ]);
 
-        if( !$user ){
-            return $this->returnErrors(['not_found:user' => "user with email: " . $post['email'] . " is not found"]);
+        if ($model->hasErrors()) return $this->returnErrors( $model->errors );
+
+        $user = User::findOne([
+//            'email' => $post['email']
+            'email' => $model->email
+        ]);
+
+        if( ! $this->isUserActive( $user ) ) return $this->returnErrors();
+
+        // token send timeout
+        if( !$this->canSendToken( $user->password_reset_token ) ){
+            return $this->returnErrors(['token_send_timeout' => $locals['token:send_timeout'] ]);
         }
 
-        // generate reset token
-        if (!User::isPasswordResetTokenValid($user->password_reset_token)) {
+        // reset token
+
+//        if ( !User::isPasswordResetTokenValid($user->password_reset_token)) {
             $user->generatePasswordResetToken();
             if (!$user->save()) {
-                return $this->returnErrors([ 'db_error' => $e->errorInfo ]);
+                return $this->returnErrors( $this->getDBError( $e->errorInfo ) );
             }
-        }
+//        }
+
+        $user->refresh();
 
         // send mail
         if( $this->sendMail(
-           $post['email'],
+            $model->email,
            'Password reset for ' . Yii::$app->name,
            ['html' => 'passwordResetToken-API-html', 'text' => 'passwordResetToken-API-text'],
            ['user' => $user]
         )
        ){
 //            return $this->returnSuccess(["user" => array($user->attributes)]); // !!! DEBUG ONLY
-
+            $response = [ "message" => str_replace( '{email}', $user->email,  $locals['mail:confirm_email_sent'] ) ];
 
             if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
-                return $this->returnSuccess(["password_confirm_token" => $user->password_reset_token] );
-            else return $this->returnSuccess();
+                $response = array_merge( $response, [ "password_confirm_token" => $user->password_reset_token ] );
+
+            return $this->returnSuccess( $response );
         }
 
         return $this->returnErrors(["sendmail:error" => 'mailer error']);
@@ -477,45 +488,61 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   PASSWORD RESET   ---VVVVVVVVVVVVVVVV
     public function actionResetPassword()
     {
+        $app_params = Yii::$app->params;
         $post = $this->POST;
+        $locals = $this->getLocals();
+//
+//        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
+//        if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
+//
+//        if( count($this->errors) ) return $this->returnErrors();
 
-        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
-        if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
 
-        if( count($this->errors) ) return $this->returnErrors();
+        $model = DynamicModel::validateData([
+            'token' => $post['token'],
+            'password' => $post['password'],
+        ], [
+            [['token'], 'required', 'message' => $locals['input_empty:token']],
+            [['password'], 'required', 'message' => $locals['input_empty:password']],
+            [['token', 'password'], 'string' ],
+        ]);
 
-//        return $this->returnSuccess([ "password" => $post['password'], "token" => $post['token'] ]);
+        if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
         $user = User::findOne([
             "password_reset_token" => $post['token'],
-            'status' => User::STATUS_ACTIVE,
         ]);
 
-        if( !$user ){
-            return $this->returnErrors( ['not_found:user' => 'user is not found' ] );
-        }
+        if( ! $this->isUserActive( $user ) ) return $this->returnErrors();
 
         if( !$this->isTokenNotExpired( $post['token'] ) ){
-            return $this->returnErrors( ['token_expired' => 'token expired' ] );
+            return $this->returnErrors( ['token_expired' => $locals['token:expired']] );
         }
 
         $user->password_reset_token = null;
         $user->setPassword( $post['password'] );
         $user->generateAuthKey();
         if( !$user->save() ){
-            return $this->returnErrors([ 'db_error' => $e->errorInfo ]);
+            return $this->returnErrors( $this->getDBError( $e->errorInfo ) );
         }
 
+        $response = [];
+
         // send mail
-        $this->sendMail(
-            $user->email,
-            'Password is resetted for ' . Yii::$app->name,
-            ['html' => 'passwordResetted-API-html', 'text' => 'passwordResetted-API-text'],
-            ['user' => $user]
-        );
+        if(
+            $this->sendMail(
+                $user->email,
+                'Password is resetted for ' . Yii::$app->name,
+                ['html' => 'passwordResetted-API-html', 'text' => 'passwordResetted-API-text'],
+                ['user' => $user]
+            )
+        ){
+//            $response = array_merge( $response, [ 'message' => $locals[''] ] );
+            $response = [ 'message' => $locals['mail:password_changed_sent'] ];
+        }
 
 //        return $this->returnSuccess(['user' => array($user->attributes)]);// !!! DEBUG ONLY
-        return $this->returnSuccess();
+        return $this->returnSuccess( $response );
 
     }
     // ^^^^^^^^^^^^^^^---   PASSWORD RESET   ---^^^^^^^^^^^^^^^^

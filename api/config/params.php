@@ -43,7 +43,6 @@ return [
 
         'username:used' => '#Username is used already.',
         'email:used' => '#Email is used already.',
-        'mail:confirm_email_sended' => '#The letter with email confirmation link sended to {email}.',
 
         'user:not_logged_in' => '#User is not logged in.',
         'user:not_found' => '#User is not found.',
@@ -51,8 +50,16 @@ return [
         'email:confirm_not_required' => '#Email confirmation is not required.',
         'email:is_confirmed_already' => '#Email is confirmed already.',
 
+        // TOKEN
         'token:expired' => '#Token is expired.',
         'token:send_timeout' => '#Token send timeout is not completed yet.',
+
+        // EMAIL
+        'mail:confirm_email_sent' => '#The letter with the email confirmation link was sent to {email}.',
+        'mail:password_reset_sent' => '#The letter with the password reset link was sent to {email}.',
+        'mail:password_changed_sent' => '#The notification of password changing was sent to {email}.',
+        'mail:send_error' => '#Mail sending error.',
+        'mail:not_sent' => '#Mail is not sended.',
     ],
 
 ];

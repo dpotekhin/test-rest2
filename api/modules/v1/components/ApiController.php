@@ -1,6 +1,7 @@
 <?php
 namespace app\modules\v1\components;
 
+use common\models\User;
 use Yii;
 use yii\filters\auth\QueryParamAuth;
 use yii\filters\Cors;
@@ -14,6 +15,10 @@ use yii\rest\Controller;
  */
 class APIController extends Controller
 {
+
+    const USER_NOT_LOGGED_IN = 'user_not_logged_in';
+    const USER_NOT_FOUND = 'user_not_found';
+    const USER_NOT_ACTIVE = 'user_not_active';
 
     public $REQUEST;
     public $POST;
@@ -109,6 +114,10 @@ class APIController extends Controller
         $this->errors[$key] = $message;
     }
 
+    public function addErrors( $errors ){
+        $this->errors = array_merge( $this->errors, $errors );
+    }
+
     public function returnErrors( $messages = null ){
 
 //        if( $messages ) $this->errors = Utils::merge_associative_arrays( $this->errors, $messages );
@@ -151,6 +160,26 @@ class APIController extends Controller
         $locals = $this->getLocals();
         $this->addError( self::USER_NOT_LOGGED_IN, $locals['user:not_logged_in'] );
     }
+
+    public function isUserActive( $user ){
+
+        $locals = $this->getLocals();
+
+        if( !$user ){
+//             $this->returnErrors(['not_found:user' => "user with email: " . $post['email'] . " is not found"]);
+            $this->addErrors([ self::USER_NOT_FOUND => $locals["user:not_found"] ]);
+            return false;
+        }
+
+        if( $user->status != User::STATUS_ACTIVE ){
+            $this->addErrors([ self::USER_NOT_ACTIVE => $locals["user:not_active"] ]);
+            return false;
+        }
+
+        return true;
+    }
+
+    //
 
     public function getLocals(){
         return Yii::$app->params['locals'];
