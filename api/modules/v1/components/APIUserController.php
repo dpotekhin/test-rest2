@@ -163,20 +163,20 @@ class APIUserController extends APIController
         if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
         // is the name unique
-        if( User::findOne(["username" => $post['username']]) ){
+        if( User::findOne(["username" => $model->username]) ){
             return $this->returnErrors(['username' => $locals['username:used'] ]);
         }
 
         // is the email unique
-        if( User::findOne(["email" => $post['email']]) ){
+        if( User::findOne(["email" => $model->email]) ){
             return $this->returnErrors(['email' => $locals['email:used'] ]);
         }
 
         // Create new User
         $user = new User();
-        $user->username = $post['username'];
-        $user->email = $post['email'];
-        $user->setPassword( $post['password'] );
+        $user->username = $model->username;
+        $user->email = $model->email;
+        $user->setPassword( $model->password );
         $user->generateAuthKey();
 
         // Setup email confirmation
@@ -192,7 +192,11 @@ class APIUserController extends APIController
         }
 
         $user->refresh();
+
         $response = [ 'user' => $this->cleanupUserData( $user->attributes ) ];
+
+        if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
+            $response = array_merge( $response, ["email_confirm_token" => $user->email_confirm_token] );
 
         // Send Mail
         if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
@@ -204,14 +208,13 @@ class APIUserController extends APIController
                 ['user' => $user ]
             );
 
-            $response = array_merge( $response, [ "message" => $locals['mail:confirm_email_sent'] ] );
+            $response = array_merge( $response, [ "message" =>  str_replace( '{email}', $user->email, $locals['mail:confirm_email_sent'] ) ] );
 
         }
 
         // Auth User // TODO: implement this
 
         return $this->returnSuccess( $response );
-//        return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ), 'email_confirm_token' => $user->email_confirm_token  ]); // !!! DEBUG
 
     }
     // ^^^^^^^^^^^^^^^---   REG   ---^^^^^^^^^^^^^^^^
@@ -360,7 +363,7 @@ class APIUserController extends APIController
         if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
         $user = User::findOne([
-            'username' => $post['username'],
+            'username' => $model->username,
         ]);
 
         if( !$user ){
@@ -368,7 +371,7 @@ class APIUserController extends APIController
         }
 
         // Check password
-        if ( !Yii::$app->getSecurity()->validatePassword( $post['password'], $user['password_hash'] )) {
+        if ( !Yii::$app->getSecurity()->validatePassword( $model->password, $user['password_hash'] )) {
             return $this->returnErrors(['wrong_login_or_password' => $locals['input:wrong_auth']]);
         }
 
@@ -510,17 +513,17 @@ class APIUserController extends APIController
         if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
         $user = User::findOne([
-            "password_reset_token" => $post['token'],
+            "password_reset_token" => $model->token,
         ]);
 
         if( ! $this->isUserActive( $user ) ) return $this->returnErrors();
 
-        if( !$this->isTokenNotExpired( $post['token'] ) ){
+        if( !$this->isTokenNotExpired( $model->token ) ){
             return $this->returnErrors( ['token_expired' => $locals['token:expired']] );
         }
 
         $user->password_reset_token = null;
-        $user->setPassword( $post['password'] );
+        $user->setPassword( $model->password );
         $user->generateAuthKey();
         if( !$user->save() ){
             return $this->returnErrors( $this->getDBError( $e->errorInfo ) );
@@ -553,14 +556,13 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   SUPPORT METHODS   ---VVVVVVVVVVVVVVVV
     public function canSendToken($token)
     {
-
         if (empty($token)) {
             return true;
         }
 
         $timestamp = (int) substr($token, strrpos($token, '_') + 1);
         $expire = Yii::$app->params['api.tokenSendTimeout'];
-        return $timestamp + $expire < time();
+        return $timestamp + $expire <= time();
     }
 
     public function isTokenNotExpired($token)
