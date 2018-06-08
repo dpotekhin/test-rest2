@@ -9,7 +9,7 @@ return [
 
 
     // API MAIN
-    'api.info.dev_token' => 'peppers_rulez',
+//    'api.info.dev_token' => 'peppers_rulez',
     'api.authWithToken' => false, // TODO: it needs to be done
     'api.confirmEmailAfterReg' => true, // Need to confirm email after registration
     'api.confirmNeededToLogin' => false, // TODO: it needs to be done

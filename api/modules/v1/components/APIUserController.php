@@ -138,9 +138,8 @@ class APIUserController extends APIController
     public function actionReg()
     {
         $app_params = Yii::$app->params;
+        $post = $this->POST;
 
-        $request = \Yii::$app->request;
-        $post = $request->post();
 
         $model = DynamicModel::validateData([
             'username' => $post['username'],
@@ -191,7 +190,7 @@ class APIUserController extends APIController
         // Send Mail
         if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
 
-            $this->senMail(
+            $this->sendMail(
                 $user->email,
                 'Registration on ' . Yii::$app->name,
                 ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
@@ -219,8 +218,7 @@ class APIUserController extends APIController
     {
         $app_params = Yii::$app->params;
 
-        $request = \Yii::$app->request;
-        $post = $request->post();
+        $post = $this->POST;
 
         // USER
         $identity = Yii::$app->user->identity;
@@ -251,7 +249,7 @@ class APIUserController extends APIController
 
         // Send Mail
         if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
-            $this->senMail(
+            $this->sendMail(
                 $identity->email,
                 'Registration on ' . Yii::$app->name,
                 ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
@@ -261,8 +259,7 @@ class APIUserController extends APIController
 
         $response = [ 'message' => 'email confirmation sended to ' . $identity->email ];
 
-        // IF DEV TOKEN
-        if( $this->checkDevToken( $post['dev_token'] ) )
+        if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
             $response = array_merge( $response, ["email_confirm_token" => $identity->email_confirm_token] );
 
         return $this->returnSuccess( $response );
@@ -276,8 +273,7 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   CONFIRM EMAIL    ---VVVVVVVVVVVVVVVV
     public function actionConfirmEmail()
     {
-        $request = \Yii::$app->request;
-        $post = $request->post();
+        $post = $this->POST;
 
         if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
 
@@ -293,7 +289,7 @@ class APIUserController extends APIController
             return $this->returnErrors( ['not_found:user' => 'user is not found' ] );
         }
 
-        if( !$this->isPasswordResetTokenValid( $post['token'] ) ){
+        if( !$this->isTokenNotExpired( $post['token'] ) ){
             return $this->returnErrors( ['token_expired' => 'token expired' ] );
         }
 
@@ -323,8 +319,7 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   LOGIN   ---VVVVVVVVVVVVVVVV
     public function actionLogin()
     {
-        $request = \Yii::$app->request;
-        $post = $request->post();
+        $post = $this->POST;
 
 //        return $post['username'];
 
@@ -415,8 +410,7 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   RECOVER PASSWORD   ---VVVVVVVVVVVVVVVV
     public function actionRecoverPassword()
     {
-        $request = \Yii::$app->request;
-        $post = $request->post();
+        $post = $this->POST;
 
         if( !$post['email'] ) $this->addError( 'required:email', 'email is required' );
 
@@ -442,7 +436,7 @@ class APIUserController extends APIController
         }
 
         // send mail
-        if( $this->senMail(
+        if( $this->sendMail(
            $post['email'],
            'Password reset for ' . Yii::$app->name,
            ['html' => 'passwordResetToken-API-html', 'text' => 'passwordResetToken-API-text'],
@@ -452,7 +446,7 @@ class APIUserController extends APIController
 //            return $this->returnSuccess(["user" => array($user->attributes)]); // !!! DEBUG ONLY
 
 
-            if( $this->checkDevToken( $post['dev_token'] ) ) // IF DEV TOKEN
+            if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
                 return $this->returnSuccess(["password_confirm_token" => $user->password_reset_token] );
             else return $this->returnSuccess();
         }
@@ -468,8 +462,7 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   PASSWORD RESET   ---VVVVVVVVVVVVVVVV
     public function actionResetPassword()
     {
-        $request = \Yii::$app->request;
-        $post = $request->post();
+        $post = $this->POST;
 
         if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
         if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
@@ -487,7 +480,7 @@ class APIUserController extends APIController
             return $this->returnErrors( ['not_found:user' => 'user is not found' ] );
         }
 
-        if( !$this->isPasswordResetTokenValid( $post['token'] ) ){
+        if( !$this->isTokenNotExpired( $post['token'] ) ){
             return $this->returnErrors( ['token_expired' => 'token expired' ] );
         }
 
@@ -499,7 +492,7 @@ class APIUserController extends APIController
         }
 
         // send mail
-        $this->senMail(
+        $this->sendMail(
             $user->email,
             'Password is resetted for ' . Yii::$app->name,
             ['html' => 'passwordResetted-API-html', 'text' => 'passwordResetted-API-text'],
@@ -512,7 +505,7 @@ class APIUserController extends APIController
     }
 
 
-    public function isPasswordResetTokenValid($token)
+    public function isTokenNotExpired($token)
     {
 
         if (empty($token)) {
@@ -546,7 +539,7 @@ class APIUserController extends APIController
     }
 
     // SEND MAIL
-    public function senMail( $to, $subject, $template, $data ){
+    public function sendMail($to, $subject, $template, $data ){
         return Yii::$app
             ->mailer
             ->compose( $template, $data )

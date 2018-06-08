@@ -15,6 +15,10 @@ use yii\rest\Controller;
 class APIController extends Controller
 {
 
+    public $REQUEST;
+    public $POST;
+    public $HAS_DEV_TOKEN;
+
     public function behaviors()
     {
         $behaviors = parent::behaviors();
@@ -49,6 +53,13 @@ class APIController extends Controller
         // other custom code here
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
 
+        //
+        $this->REQUEST = \Yii::$app->request;
+        $this->POST = $this->REQUEST->post();
+
+        $dev_token = $this->POST['dev_token'];
+        $this->HAS_DEV_TOKEN = $dev_token && $dev_token === Yii::$app->params['api.info.dev_token'];
+
         return true; // or false to not run the action
     }
 
@@ -73,11 +84,9 @@ class APIController extends Controller
     // VVVVVVVVVVVVVVV---   INFO   ---VVVVVVVVVVVVVVVV
     public function actionInfo()
     {
-        $request = Yii::$app->request;
-        $post = $request->post();
 
         // DEV TOKEN REQUIRED !
-        if( !$this->checkDevToken( $post['dev_token'], true) ) return $this->returnErrors();
+        if( !$this->HAS_DEV_TOKEN ) return $this->returnErrors(['required:dev_token' => 'developer token is required']);
         /*
         if( $post['dev_token'] != Yii::$app->params['api.info.dev_token'] ){
             return $this->returnErrors([ 'required:dev_token' => 'developer token is required' ]);
@@ -120,19 +129,6 @@ class APIController extends Controller
 
 
     // SUPPORT
-
-    public function checkDevToken($token, $token_is_required = false ){
-
-        if( $token && $token === Yii::$app->params['api.info.dev_token'] ){
-            return true;
-        }
-
-        if( $token_is_required ){
-            $this->addError( 'required:dev_token', 'developer token is required' );
-        }
-
-        return false;
-    }
 
 
 }
