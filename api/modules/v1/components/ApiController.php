@@ -58,7 +58,14 @@ class APIController extends Controller
 
     public function methods(){
         return [
-            'info' => ['dev_token'],
+            'info' => [
+                'request' => [
+                    'dev_token(string) optional dev!',
+                ],
+                'response' => [
+                    'dev!: methods'
+                ]
+            ],
         ];
     }
 
@@ -69,9 +76,13 @@ class APIController extends Controller
         $request = Yii::$app->request;
         $post = $request->post();
 
+        // DEV TOKEN REQUIRED !
+        if( !$this->checkDevToken( $post['dev_token'], true) ) return $this->returnErrors();
+        /*
         if( $post['dev_token'] != Yii::$app->params['api.info.dev_token'] ){
             return $this->returnErrors([ 'required:dev_token' => 'developer token is required' ]);
         }
+        */
 
         return $this->returnSuccess([ 'methods' => $this->methods() ]);
     }
@@ -105,6 +116,22 @@ class APIController extends Controller
     public function returnSuccess( $answer = null ){
         if( isset($answer) ) return array_merge( ['success' => true ], $answer );
         return ['success' => true ];
+    }
+
+
+    // SUPPORT
+
+    public function checkDevToken($token, $token_is_required = false ){
+
+        if( $token && $token === Yii::$app->params['api.info.dev_token'] ){
+            return true;
+        }
+
+        if( $token_is_required ){
+            $this->addError( 'required:dev_token', 'developer token is required' );
+        }
+
+        return false;
     }
 
 

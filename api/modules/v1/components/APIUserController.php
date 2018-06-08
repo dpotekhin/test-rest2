@@ -63,15 +63,72 @@ class APIUserController extends APIController
     {
         $methods = parent::methods();
         $methods = array_merge( $methods, [
-            'reg' => ['username','password'],
-            'confirm-email-send' => ['-- authorized only --'],
-            'confirm-email' => ['token'],
-            'login' => ['username', 'password'],
-            'auth' => ['-- authorized only --'],
-            'edit' => ['username', 'email', 'password', '-- authorized only --'],
-            'logout' => ['-- authorized only --'],
-            'recover-password' => ['email'],
-            'reset-password' => ['password','token'],
+            'reg' => [
+                'request' => [
+                    'username(string)',
+                    'password(string)',
+                ],
+                "response" => $this->allowed_user_attributes,
+            ],
+            'confirm-email-send' => [
+                'request' => [
+                    '-- only for authorized --',
+                    'dev_token(string) optional dev!'
+                ],
+                "response" => [
+                    'dev!: email_confirm_token(string)',
+                ],
+            ],
+            'confirm-email' => [
+                'request' => [
+                    'token(string)',
+                ],
+                "response" => []
+            ],
+            'login' => [
+                'request' => [
+                    'username(string)',
+                    'password(string)'
+                ],
+                "response" => $this->allowed_user_attributes,
+            ],
+            'auth' => [
+                'request' => [
+                    '-- only for authorized --',
+                ],
+                "response" => $this->allowed_user_attributes,
+            ],
+            'edit' => [
+                'request' => [
+                    '-- only for authorized --',
+                    'username(string)',
+                    'email(string)',
+                    'password(string)',
+                ],
+                "response" => $this->allowed_user_attributes,
+            ],
+            'logout' => [
+                'request' => [
+                    '-- only for authorized --',
+                ],
+                "response" => []
+            ],
+            'recover-password' => [
+                'request' => [
+                    'email(string)',
+                    'dev_token(string) optional dev!',
+                ],
+                "response" => [
+                    'dev!: password_confirm_token(string)',
+                ]
+            ],
+            'reset-password' => [
+                'request' => [
+                    'password(string)',
+                    'token(string)',
+                ],
+                "response" => []
+            ],
         ]);
         return $methods;
     }
@@ -202,7 +259,13 @@ class APIUserController extends APIController
             );
         }
 
-        return $this->returnSuccess([ 'message' => 'email confirmation sended to ' . $identity->email ]);
+        $response = [ 'message' => 'email confirmation sended to ' . $identity->email ];
+
+        // IF DEV TOKEN
+        if( $this->checkDevToken( $post['dev_token'] ) )
+            $response = array_merge( $response, ["email_confirm_token" => $identity->email_confirm_token] );
+
+        return $this->returnSuccess( $response );
     }
     // ^^^^^^^^^^^^^^^---   CONFIRM EMAIL SEND   ---^^^^^^^^^^^^^^^^
 
@@ -386,8 +449,12 @@ class APIUserController extends APIController
            ['user' => $user]
         )
        ){
-            return $this->returnSuccess(["user" => array($user->attributes)]); // !!! DEBUG ONLY
-            return $this->returnSuccess();
+//            return $this->returnSuccess(["user" => array($user->attributes)]); // !!! DEBUG ONLY
+
+
+            if( $this->checkDevToken( $post['dev_token'] ) ) // IF DEV TOKEN
+                return $this->returnSuccess(["password_confirm_token" => $user->password_reset_token] );
+            else return $this->returnSuccess();
         }
 
         return $this->returnErrors(["sendmail:error" => 'mailer error']);
