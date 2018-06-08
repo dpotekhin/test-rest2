@@ -37,6 +37,7 @@ return [
 
         // CUSTOM ERRORS
         'input_empty:token' => '#Token cannot be blank.',
+        'input:wrong_auth' => '#Wrong login or password.',
 
         'db:error' => '#DB error.',
 
@@ -46,6 +47,7 @@ return [
 
         'user:not_logged_in' => '#User is not logged in.',
         'user:not_found' => '#User is not found.',
+        'user:not_active' => '#User is not activated.',
         'email:confirm_not_required' => '#Email confirmation is not required.',
         'email:is_confirmed_already' => '#Email is confirmed already.',
 

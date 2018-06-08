@@ -15,6 +15,7 @@ class APIUserController extends APIController
 
     const USER_NOT_LOGGED_IN = 'user_not_logged_in';
     const USER_NOT_FOUND = 'user_not_found';
+    const USER_NOT_ACTIVE = 'user_not_active';
 
 
     public $modelClass = 'app\modules\v1\models\APIUser';
@@ -344,42 +345,41 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   LOGIN   ---VVVVVVVVVVVVVVVV
     public function actionLogin()
     {
+        $app_params = Yii::$app->params;
         $post = $this->POST;
+        $locals = $this->getLocals();
+        //
 
-//        return $post['username'];
+        $model = DynamicModel::validateData([
+            'username' => $post['username'],
+            'password' => $post['password'],
+        ], [
+            [['username'], 'required', 'message' => $locals['input_empty:username']],
+            [['password'], 'required', 'message' => $locals['input_empty:password']],
+            [['username', 'password'], 'string' ],
+        ]);
 
-//        if( !$post ) {
-//            $this->addError('required:params', 'params is reqiured');
-//            return $this->returnErrors();
-//        }
+        if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
-        if( !$post['username'] ) $this->addError( 'required:username', 'username is required' );
-//        if( !$post['email'] ) $this->addError( 'email', 'email is required' );
-        if( !$post['password'] ) $this->addError( 'required:password', 'password is required' );
-
-        if( count($this->errors) ){
-            return $this->returnErrors();
-        }
-
-        $identity = User::findOne([
+        $user = User::findOne([
             'username' => $post['username'],
         ]);
 
-        if( !$identity ){
-            return $this->returnErrors(['not_found:user' => 'user is not found']);
+        if( !$user ){
+            return $this->returnErrors([ self::USER_NOT_FOUND => $locals['user:not_found'] ]);
         }
 
         // Check password
-        if ( !Yii::$app->getSecurity()->validatePassword( $post['password'], $identity['password_hash'] )) {
-            return $this->returnErrors(['wrong_login_or_password' => 'wrong login or password']);
+        if ( !Yii::$app->getSecurity()->validatePassword( $post['password'], $user['password_hash'] )) {
+            return $this->returnErrors(['wrong_login_or_password' => $locals['input:wrong_auth']]);
         }
 
         // Check user status
-        if($identity->status !== User::STATUS_ACTIVE){
-            return $this->returnErrors([ 'user:not_active' => 'user is inactive' ]);
+        if($user->status !== User::STATUS_ACTIVE){
+            return $this->returnErrors([ self::USER_NOT_ACTIVE => $locals['user:not_active'] ]);
         }
 
-        Yii::$app->user->login($identity);
+        Yii::$app->user->login($user);
 
         return $this->returnSuccess( ['user' => $this->getUserData()] );
 
@@ -393,11 +393,11 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   AUTH   ---VVVVVVVVVVVVVVVV
     public function actionAuth()
     {
-        $identity = Yii::$app->user->identity;
+//        $app_params = Yii::$app->params;
+//        $post = $this->POST;
+//        $locals = $this->getLocals();
 
-        if( !$identity ){
-            return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
-        }
+        if(  !($user = $this->getUser()) ) return $this->returnErrors();
 
         return $this->returnSuccess(['user' => $this->getUserData() ]);
     }
@@ -408,21 +408,11 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   LOGOUT   ---VVVVVVVVVVVVVVVV
     public function actionLogout()
     {
+//        $app_params = Yii::$app->params;
+//        $post = $this->POST;
+//        $locals = $this->getLocals();
 
-        $identity = Yii::$app->user->identity;
-
-        // !!! DEBUG !!!
-//        $this->senMail(
-//            $user->email,
-//            (Yii::$app->params['mail.password_reseted'])(),
-//            ['html' => 'passwordResetToken-API-html', 'text' => 'passwordResetToken-API-text'],
-//            ['user' => [] ]
-//        );
-        // !!! DEBUG !!!
-
-        if( !$identity ){
-            return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
-        }
+        if(  !($user = $this->getUser()) ) return $this->returnErrors();
 
         Yii::$app->user->logout();
         return $this->returnSuccess();

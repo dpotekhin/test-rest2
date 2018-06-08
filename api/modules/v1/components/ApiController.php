@@ -140,8 +140,18 @@ class APIController extends Controller
         return ['success' => true ];
     }
 
+    // -------------------- SUPPORT --------------------
 
-    // SUPPORT
+    public function getUser(){
+
+        $user = Yii::$app->user->identity;
+
+        if( $user ) return $user;
+
+        $locals = $this->getLocals();
+        $this->addError( self::USER_NOT_LOGGED_IN, $locals['user:not_logged_in'] );
+    }
+
     public function getLocals(){
         return Yii::$app->params['locals'];
     }
@@ -150,6 +160,6 @@ class APIController extends Controller
         return Yii::$app->security->generateRandomString() . '_' . time();
     }
 
-
+    // -------------------- SUPPORT --------------------
 
 }
