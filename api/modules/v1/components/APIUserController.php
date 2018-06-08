@@ -12,6 +12,11 @@ use yii\db\Exception;
  */
 class APIUserController extends APIController
 {
+
+    const USER_NOT_LOGGED_IN = 'user_not_logged_in';
+    const USER_NOT_FOUND = 'user_not_found';
+
+
     public $modelClass = 'app\modules\v1\models\APIUser';
 
     // keys for user attributes filtration
@@ -134,38 +139,44 @@ class APIUserController extends APIController
     }
 
 
+
+
+
+
     // VVVVVVVVVVVVVVV---   REG   ---VVVVVVVVVVVVVVVV
     public function actionReg()
     {
         $app_params = Yii::$app->params;
         $post = $this->POST;
-
+        $locals = $this->getLocals();
+        //
 
         $model = DynamicModel::validateData([
             'username' => $post['username'],
             'email' => $post['email'],
             'password' => $post['password'],
         ], [
-            [['username', 'email', 'password'], 'required'],
-            [['username', 'email'], 'string', 'min' => 3, 'max' => 128],
-            ['email', 'email'],
-            [['password'], 'string', 'min' => $app_params['api.passwordMinLength'], 'max' => $app_params['api.passwordMaxLength'] ],
+            [['username'], 'required', 'message' => $locals['input_empty:username']],
+            [['email'], 'required', 'message' => $locals['input_empty:email']],
+            [['password'], 'required', 'message' => $locals['input_empty:password']],
+            [['username', 'email'], 'string', 'min' => 3, 'max' => 50, 'tooLong' => $locals['input_string:too_long'], 'tooShort' => $locals['input_string:too_short'] ],
+            ['email', 'email', 'message' => $locals['input_email:wrong']],
+            [['password'], 'string', 'min' => $app_params['api.passwordMinLength'], 'max' => $app_params['api.passwordMaxLength'], 'tooLong' => $locals['input_string:too_long'], 'tooShort' => $locals['input_string:too_short'] ],
         ]);
 
-        if ($model->hasErrors()) {
-            return $this->returnErrors( $model->errors );
-        }
+        if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
         // is the name unique
         if( User::findOne(["username" => $post['username']]) ){
-            return $this->returnErrors(['is_used:username' => 'username is used already']);
+            return $this->returnErrors(['username' => $locals['username:used'] ]);
         }
 
         // is the email unique
         if( User::findOne(["email" => $post['email']]) ){
-            return $this->returnErrors(['is_used:email' => 'email is used already']);
+            return $this->returnErrors(['email' => $locals['email:used'] ]);
         }
 
+        // Create new User
         $user = new User();
         $user->username = $post['username'];
         $user->email = $post['email'];
@@ -181,11 +192,11 @@ class APIUserController extends APIController
         try{
             $user->save(false);
         }catch(Exception $e){
-//            throw new \yii\web\HttpException(405, 'Error saving model');
-//            $this->addError('request', 'DataBase error');
-//            return $this->getErrors();
             return $this->returnErrors(['db_error' => $e->errorInfo]);
         }
+
+        $user->refresh();
+        $response = [ 'user' => $this->cleanupUserData( $user->attributes ) ];
 
         // Send Mail
         if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
@@ -197,14 +208,13 @@ class APIUserController extends APIController
                 ['user' => $user ]
             );
 
+            $response = array_merge( $response, [ "message" => $locals['mail:confirm_email_sended'] ] );
+
         }
 
         // Auth User // TODO: implement this
-//        if( Yii::$app->params['mail.sendOnRegister'] ){
-//
-//        }
 
-        return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ) ]);
+        return $this->returnSuccess( $response );
 //        return $this->returnSuccess( ['user' => $this->cleanupUserData( $user->attributes ), 'email_confirm_token' => $user->email_confirm_token  ]); // !!! DEBUG
 
     }
@@ -213,54 +223,66 @@ class APIUserController extends APIController
 
 
 
+
     // VVVVVVVVVVVVVVV---   CONFIRM EMAIL SEND   ---VVVVVVVVVVVVVVVV
     public function actionConfirmEmailSend()
     {
         $app_params = Yii::$app->params;
-
         $post = $this->POST;
+        $locals = $this->getLocals();
+        //
 
         // USER
-        $identity = Yii::$app->user->identity;
+        $user = Yii::$app->user->identity;
 
-        if( !$identity ){
-            return $this->returnErrors(['user_not_logged_in' => 'user not logged in']);
+        if( !$user ){
+            return $this->returnErrors([ self::USER_NOT_LOGGED_IN => $locals['user:not_logged_in'] ]);
         }
 
         // is confirmation required
         if( !$app_params['api.confirmEmailAfterReg'] ){
-            return $this->returnErrors(['email_confirm_is_not_required' => 'email confirmation is not required']);
+            return $this->returnErrors(['email_confirm_is_not_required' => $locals['email:confirm_not_required'] ]);
         }
 
         // is user already confirm his email
-        if( $identity->email_confirmed ) {
-            return $this->returnErrors(['email_is_confirmed' => 'email is confirmed already']);
+        if( $user->email_confirmed ) {
+            return $this->returnErrors(['email_is_confirmed' => $locals['email:is_confirmed_already'] ]);
+        }
+
+        // token send timeout
+        if( !$this->canSendToken( $user->email_confirm_token ) ){
+            return $this->returnErrors(['token_send_timeout' => $locals['token:send_timeout'] ]);
         }
 
         // Setup email confirmation
-        $identity->email_confirm_token = Yii::$app->security->generateRandomString() . '_' . time();
+        $user->email_confirm_token = $this->generateToken();
 
         // Save
         try{
-            $identity->save(false);
+            $user->save(false);
         }catch(Exception $e){
-            return $this->returnErrors(['db_error' => $e->errorInfo]);
+            return $this->returnErrors( $this->getDBError( $e->errorInfo ) );
         }
+
+        $user->refresh();
 
         // Send Mail
         if( $app_params['mail.sendOnRegister'] || $app_params['api.confirmEmailAfterReg'] ){
             $this->sendMail(
-                $identity->email,
+                $user->email,
                 'Registration on ' . Yii::$app->name,
                 ['html' => 'userRegistered-API-html', 'text' => 'userRegistered-API-text'],
-                ['user' => $identity ]
+                ['user' => $user ]
             );
         }
 
-        $response = [ 'message' => 'email confirmation sended to ' . $identity->email ];
+        $response = [
+            'message' => str_replace( '{email}', $user->email,  $locals['mail:confirm_email_sended'] ),
+            'token_send_timeout' => $app_params['api.tokenSendTimeout'],
+        ];
 
         if( $this->HAS_DEV_TOKEN ) // IF DEV TOKEN
-            $response = array_merge( $response, ["email_confirm_token" => $identity->email_confirm_token] );
+            $response = array_merge( $response, ["email_confirm_token" => $user->email_confirm_token] );
 
         return $this->returnSuccess( $response );
     }
@@ -273,9 +295,11 @@ class APIUserController extends APIController
     // VVVVVVVVVVVVVVV---   CONFIRM EMAIL    ---VVVVVVVVVVVVVVVV
     public function actionConfirmEmail()
     {
+        $app_params = Yii::$app->params;
         $post = $this->POST;
+        $locals = $this->getLocals();
 
-        if( !$post['token'] ) $this->addError( 'required:token', 'token is required' );
+        if( !$post['token'] ) $this->addError( 'token', $locals['input_empty:token'] );
 
         if( count($this->errors) ) return $this->returnErrors();
 
@@ -286,17 +310,18 @@ class APIUserController extends APIController
         ]);
 
         if( !$user ){
-            return $this->returnErrors( ['not_found:user' => 'user is not found' ] );
+            return $this->returnErrors( [self::USER_NOT_FOUND => $locals['user:not_found']] );
         }
 
         if( !$this->isTokenNotExpired( $post['token'] ) ){
-            return $this->returnErrors( ['token_expired' => 'token expired' ] );
+            return $this->returnErrors( ['token_expired' => $locals['token:expired']] );
         }
 
         $user->email_confirm_token = null;
         $user->email_confirmed = true;
+
         if( !$user->save() ){
-            return $this->returnErrors([ 'db_error' => $e->errorInfo ]);
+            return $this->returnErrors( $this->getDBError( $e->errorInfo ) );
         }
 
         // send mail
@@ -503,7 +528,23 @@ class APIUserController extends APIController
         return $this->returnSuccess();
 
     }
+    // ^^^^^^^^^^^^^^^---   PASSWORD RESET   ---^^^^^^^^^^^^^^^^
 
+
+
+
+    // VVVVVVVVVVVVVVV---   SUPPORT METHODS   ---VVVVVVVVVVVVVVVV
+    public function canSendToken($token)
+    {
+
+        if (empty($token)) {
+            return true;
+        }
+
+        $timestamp = (int) substr($token, strrpos($token, '_') + 1);
+        $expire = Yii::$app->params['api.tokenSendTimeout'];
+        return $timestamp + $expire < time();
+    }
 
     public function isTokenNotExpired($token)
     {
@@ -513,16 +554,10 @@ class APIUserController extends APIController
         }
 
         $timestamp = (int) substr($token, strrpos($token, '_') + 1);
-        $expire = Yii::$app->params['user.passwordResetTokenExpire'];
+        $expire = Yii::$app->params['api.tokenResetExpire'];
         return $timestamp + $expire >= time();
     }
-    // ^^^^^^^^^^^^^^^---   PASSWORD RESET   ---^^^^^^^^^^^^^^^^
 
-
-
-
-    // VVVVVVVVVVVVVVV---   SUPPORT METHODS   ---VVVVVVVVVVVVVVVV
-    // USER DATA
     public function getUserData(){
         if( Yii::$app->user->identity ) {
             $user = (array)Yii::$app->user->identity->attributes;

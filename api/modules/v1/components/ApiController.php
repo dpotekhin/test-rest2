@@ -98,7 +98,9 @@ class APIController extends Controller
     // ^^^^^^^^^^^^^^^---   INFO   ---^^^^^^^^^^^^^^^^
 
 
-    // RETURN ERRORS
+
+
+    // VVVVVVVVVVVVVVV---   ERRORS   ---VVVVVVVVVVVVVVVV
     public $errors = array();
 
     public function addError( $key, $message ){
@@ -109,7 +111,8 @@ class APIController extends Controller
 
     public function returnErrors( $messages = null ){
 
-        if( $messages ) $this->errors = Utils::merge_associative_arrays( $this->errors, $messages );
+//        if( $messages ) $this->errors = Utils::merge_associative_arrays( $this->errors, $messages );
+        if( $messages ) $this->errors = array_merge( $this->errors, $messages );
 
         if( count( $this->errors ) ){
             return [
@@ -121,6 +124,16 @@ class APIController extends Controller
         }
     }
 
+    public function getDBError( $error ){
+        $app_params = Yii::$app->params;
+        $locals = $this->getLocals();
+        return ['db_error' => ($app_params['api.sendDetailsOnDBError'] ? $error : $locals['db:error'] ) ];
+    }
+    // ^^^^^^^^^^^^^^^---   ERRORS   ---^^^^^^^^^^^^^^^^
+
+
+
+
     // RETURN SUCCESS
     public function returnSuccess( $answer = null ){
         if( isset($answer) ) return array_merge( ['success' => true ], $answer );
@@ -129,6 +142,14 @@ class APIController extends Controller
 
 
     // SUPPORT
+    public function getLocals(){
+        return Yii::$app->params['locals'];
+    }
+
+    public function generateToken(){
+        return Yii::$app->security->generateRandomString() . '_' . time();
+    }
+
 
 
 }
