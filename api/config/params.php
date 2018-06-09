@@ -3,18 +3,22 @@
 return [
 
     'adminEmail' => 'admin@example.com',
-    'api.tokenSendTimeout' => 10,
-    'api.tokenResetExpire' => 3600,
-//    'user.passwordResetTokenExpire' => 1,
     'supportEmail' => 'support@example.com',
 
 
-    // API MAIN
+    // API DEBUG
 //    'api.info.dev_token' => 'peppers_rulez',
     'api.sendDetailsOnDBError' => true,
+
+    // API MAIN
+    'api.tokenSendTimeout' => 10,
+    'api.tokenResetExpire' => 3600,
+    'api.loginRememberMeOn' => !true,
+    'api.loginRememberMeDuration' => 3600*24*30,
+    'api.confirmNeededToLogin' => false, // TODO: it needs to be done
+
     'api.authWithToken' => false, // TODO: it needs to be done
     'api.confirmEmailAfterReg' => true, // Need to confirm email after registration
-    'api.confirmNeededToLogin' => false, // TODO: it needs to be done
 
     'api.passwordMinLength' => 6, //
     'api.passwordMaxLength' => 20, //

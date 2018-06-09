@@ -81,7 +81,7 @@ class APIUserController extends APIController
             'confirm-email-send' => [
                 'request' => [
                     '-- only for authorized --',
-                    'dev_token(string) optional dev!'
+                    'dev_token(string) optional dev! // works if enabled on the server'
                 ],
                 "response" => [
                     'dev!: email_confirm_token(string)',
@@ -96,7 +96,8 @@ class APIUserController extends APIController
             'login' => [
                 'request' => [
                     'username(string) required',
-                    'password(string) required'
+                    'password(string) required',
+                    'remember_me(boolean) optional // works if enabled on the server',
                 ],
                 "response" => $this->allowed_user_attributes,
             ],
@@ -126,7 +127,7 @@ class APIUserController extends APIController
             'recover-password' => [
                 'request' => [
                     'email(string) required',
-                    'dev_token(string) optional dev!',
+                    'dev_token(string) optional dev! // works if enabled on the server',
                 ],
                 "response" => [
                     'dev!: password_confirm_token(string)',
@@ -382,10 +383,12 @@ class APIUserController extends APIController
         $model = DynamicModel::validateData([
             'username' => $post['username'],
             'password' => $post['password'],
+            'remember_me' => $post['remember_me'],
         ], [
             [['username'], 'required', 'message' => $locals['input_empty:username']],
             [['password'], 'required', 'message' => $locals['input_empty:password']],
             [['username', 'password'], 'string' ],
+            ['remember_me', 'boolean' ],
         ]);
 
         if ($model->hasErrors()) return $this->returnErrors( $model->errors );
@@ -408,9 +411,13 @@ class APIUserController extends APIController
             return $this->returnErrors([ APIController::USER_NOT_ACTIVE => $locals['user:not_active'] ]);
         }
 
-        Yii::$app->user->login($user);
+        // Remember me
+        $remember_me = $model->remember_me && $app_params['api.loginRememberMeOn'];
+        $remember_me_duration = $app_params['api.loginRememberMeDuration'];
 
-        return $this->returnSuccess( ['user' => $this->getCurrentUserData()] );
+        Yii::$app->user->login($user, $remember_me ? $remember_me_duration : 0 );
+
+        return $this->returnSuccess( ['user' => $this->getCurrentUserData(), 'remember_me' => $remember_me, 'remember_me_duration' => $remember_me_duration ] );
 
     }
     // ^^^^^^^^^^^^^^^---   LOGIN   ---^^^^^^^^^^^^^^^^
