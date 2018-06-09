@@ -51,6 +51,7 @@ class APIController extends Controller
         // your custom code here, if you want the code to run before action filters,
         // which are triggered on the [[EVENT_BEFORE_ACTION]] event, e.g. PageCache or AccessControl
 
+
         if (!parent::beforeAction($action)) {
             return false;
         }
@@ -74,12 +75,12 @@ class APIController extends Controller
 
     public function methods(){
         return [
-            'info' => [
+            'dev-info' => [
                 'request' => [
                     'dev_token(string) optional dev!',
                 ],
                 'response' => [
-                    'dev!: methods'
+                    'dev!: methods[]'
                 ]
             ],
         ];
@@ -87,7 +88,7 @@ class APIController extends Controller
 
 
     // VVVVVVVVVVVVVVV---   INFO   ---VVVVVVVVVVVVVVVV
-    public function actionInfo()
+    public function actionDevInfo()
     {
 
         // DEV TOKEN REQUIRED !
