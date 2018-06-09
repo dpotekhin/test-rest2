@@ -19,9 +19,12 @@ class APIUserController extends APIController
     public $allowed_user_attributes = [
         'id',
         'username',
+        'first_name',
+        'last_name',
         'email',
         'status',
-        'email_confirmed'
+        'email_confirmed',
+        'personal_data_agreement',
     ];
 
     public function actions()
@@ -66,8 +69,12 @@ class APIUserController extends APIController
         $methods = array_merge( $methods, [
             'reg' => [
                 'request' => [
-                    'username(string)',
-                    'password(string)',
+                    'username(string) required',
+                    'email(string) required',
+                    'password(string) required',
+                    'first_name(string) required',
+                    'last_name(string) required',
+                    'personal_data_agreement(boolean) required',
                 ],
                 "response" => $this->allowed_user_attributes,
             ],
@@ -82,14 +89,14 @@ class APIUserController extends APIController
             ],
             'confirm-email' => [
                 'request' => [
-                    'token(string)',
+                    'token(string) required',
                 ],
                 "response" => []
             ],
             'login' => [
                 'request' => [
-                    'username(string)',
-                    'password(string)'
+                    'username(string) required',
+                    'password(string) required'
                 ],
                 "response" => $this->allowed_user_attributes,
             ],
@@ -102,9 +109,11 @@ class APIUserController extends APIController
             'edit' => [
                 'request' => [
                     '-- only for authorized --',
-                    'username(string)',
-                    'email(string)',
-                    'password(string)',
+                    'username(string) optional',
+                    'email(string) optional',
+                    'password(string) optional',
+                    'first_name(string) optional',
+                    'last_name(string) optional',
                 ],
                 "response" => $this->allowed_user_attributes,
             ],
@@ -116,7 +125,7 @@ class APIUserController extends APIController
             ],
             'recover-password' => [
                 'request' => [
-                    'email(string)',
+                    'email(string) required',
                     'dev_token(string) optional dev!',
                 ],
                 "response" => [
@@ -125,8 +134,8 @@ class APIUserController extends APIController
             ],
             'reset-password' => [
                 'request' => [
-                    'password(string)',
-                    'token(string)',
+                    'password(string) required',
+                    'token(string) required',
                 ],
                 "response" => []
             ],
@@ -151,13 +160,24 @@ class APIUserController extends APIController
             'username' => $post['username'],
             'email' => $post['email'],
             'password' => $post['password'],
+            'first_name' => $post['first_name'],
+            'last_name' => $post['last_name'],
+            'personal_data_agreement' => $post['personal_data_agreement'],
         ], [
             [['username'], 'required', 'message' => $locals['input_empty:username']],
             [['email'], 'required', 'message' => $locals['input_empty:email']],
             [['password'], 'required', 'message' => $locals['input_empty:password']],
-            [['username', 'email'], 'string', 'min' => 3, 'max' => 50, 'tooLong' => $locals['input_string:too_long'], 'tooShort' => $locals['input_string:too_short'] ],
+            [['first_name'], 'required', 'message' => $locals['input_empty:first_name']],
+            [['last_name'], 'required', 'message' => $locals['input_empty:last_name']],
+            [['personal_data_agreement'], 'required', 'message' => $locals['input_empty:personal_data_agreement']],
+
+            [['username', 'email', 'first_name', 'last_name'], 'string',
+                'min' => 3, 'max' => 50, 'tooLong' => $locals['input_string:too_long'], 'tooShort' => $locals['input_string:too_short'] ],
             ['email', 'email', 'message' => $locals['input_email:wrong']],
-            [['password'], 'string', 'min' => $app_params['api.passwordMinLength'], 'max' => $app_params['api.passwordMaxLength'], 'tooLong' => $locals['input_string:too_long'], 'tooShort' => $locals['input_string:too_short'] ],
+//            [['personal_data_agreement'], 'boolean', 'trueValue' => true, 'falseValue' => false, ],
+            [['personal_data_agreement'], 'boolean' ],
+            [['password'], 'string',
+                'min' => $app_params['api.passwordMinLength'], 'max' => $app_params['api.passwordMaxLength'], 'tooLong' => $locals['input_string:too_long'], 'tooShort' => $locals['input_string:too_short'] ],
         ]);
 
         if ($model->hasErrors()) return $this->returnErrors( $model->errors );
@@ -165,6 +185,11 @@ class APIUserController extends APIController
         // is the name unique
         if( User::findOne(["username" => $model->username]) ){
             return $this->returnErrors(['username' => $locals['username:used'] ]);
+        }
+
+        // is personal data agreement checked
+        if( !$model->personal_data_agreement ){
+            return $this->returnErrors(['personal_data_agreement' => $locals['input:personal_data_agreement'] ]);
         }
 
         // is the email unique
@@ -176,6 +201,9 @@ class APIUserController extends APIController
         $user = new User();
         $user->username = $model->username;
         $user->email = $model->email;
+        $user->first_name = $model->first_name;
+        $user->last_name = $model->last_name;
+        $user->personal_data_agreement = $model->personal_data_agreement;
         $user->setPassword( $model->password );
         $user->generateAuthKey();
 
@@ -382,7 +410,7 @@ class APIUserController extends APIController
 
         Yii::$app->user->login($user);
 
-        return $this->returnSuccess( ['user' => $this->getUserData()] );
+        return $this->returnSuccess( ['user' => $this->getCurrentUserData()] );
 
     }
     // ^^^^^^^^^^^^^^^---   LOGIN   ---^^^^^^^^^^^^^^^^
@@ -400,7 +428,7 @@ class APIUserController extends APIController
 
         if(  !($user = $this->getUser()) ) return $this->returnErrors();
 
-        return $this->returnSuccess(['user' => $this->getUserData() ]);
+        return $this->returnSuccess(['user' => $this->getCurrentUserData() ]);
     }
     // ^^^^^^^^^^^^^^^---   AUTH   ---^^^^^^^^^^^^^^^^
 
@@ -577,7 +605,7 @@ class APIUserController extends APIController
         return $timestamp + $expire >= time();
     }
 
-    public function getUserData(){
+    public function getCurrentUserData(){
         if( Yii::$app->user->identity ) {
             $user = (array)Yii::$app->user->identity->attributes;
             $user = $this->cleanupUserData( $user );

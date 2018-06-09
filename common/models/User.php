@@ -15,13 +15,17 @@ use yii\web\IdentityInterface;
  * @property string $password_hash
  * @property string $password_reset_token
  * @property string $email_confirm_token
- * @property string $email_confirmed
+ * @property boolean $email_confirmed
  * @property string $email
  * @property string $auth_key
  * @property integer $status
  * @property integer $created_at
  * @property integer $updated_at
  * @property string $password write-only password
+ *
+ * @property string $first_name
+ * @property string $last_name
+ * @property boolean $personal_data_agreement
  */
 class User extends ActiveRecord implements IdentityInterface
 {
