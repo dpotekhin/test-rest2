@@ -247,16 +247,16 @@ class APIUserController extends APIController
 
         if ($model->hasErrors()) return $this->returnErrors( $model->errors );
 
+
         // check fields
         $this->_checkEditedFields( $user, $model, $locals, $this->allowed_to_change_user_attributes );
-
         if( count($this->errors) ) return $this->returnErrors();
 
 //        return $user;
 
         // apply changes
         if( ! $this->_applyEditedFields( $user , $model ) ){
-            return $this->returnErrors([ 'message' => $locals['api.no_changes'] ]);
+            return $this->returnErrors([ 'message' => $locals['request.no_changes'] ]);
         }
 
         return $this->completeUserDataChange( $user , false );
@@ -270,15 +270,6 @@ class APIUserController extends APIController
         foreach ( $this->allowed_to_change_user_attributes as $key => $value ){
             $attrs[ $key ] = $post[ $key ];
         }
-        /*
-         [
-            'username' => $post['username'],
-            'email' => $post['email'],
-            'password' => $post['password'],
-            'first_name' => $post['first_name'],
-            'last_name' => $post['last_name'],
-        ]
-         */
         return $attrs;
     }
 
@@ -338,6 +329,7 @@ class APIUserController extends APIController
 //        $post = $this->POST;
         $locals = $this->getLocals();
 
+
         // Setup email confirmation
         if( $app_params['api.emailConfirmRequired'] ){
             $user->email_confirm_token = Yii::$app->security->generateRandomString() . '_' . time();
@@ -349,6 +341,8 @@ class APIUserController extends APIController
         }catch(Exception $e){
             return $this->returnErrors(['db_error' => $e->errorInfo]);
         }
+
+
 
         $user->refresh();
 

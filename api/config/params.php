@@ -22,7 +22,6 @@ return [
 
     'api.passwordMinLength' => 6, //
     'api.passwordMaxLength' => 20, //
-    'api.no_changes' => '#There`s nothing to change.' , //
 
 
     // SEND MAIL SETTINGS
@@ -33,7 +32,7 @@ return [
     // LOCALS
     'locals' => [
 
-        // NATIVE ERRORS
+    // NATIVE ERRORS
         'input_empty:username' => '#{attribute} cannot be blank.',
         'input_empty:email' => '#{attribute} cannot be blank.',
         'input_empty:first_name' => '#{attribute} cannot be blank.',
@@ -45,17 +44,23 @@ return [
         'input_string:too_long' => '#{attribute} should contain at most {max} characters.',
         'input_email:wrong' => '#{attribute} is not a valid email address.',
 
-        // CUSTOM ERRORS
+
+    // CUSTOM ERRORS
+
+        // GENERAL
+        'db:error' => '#DB error.',
+        'request.no_changes' => '#There`s nothing to change.' , //
+
+        // INPUT
         'input:personal_data_agreement' => 'It is necessary to confirm the agreement on the processing of personal data.',
         'input_empty:token' => '#Token cannot be blank.',
         'input:wrong_auth' => '#Wrong login or password.',
-
-        'db:error' => '#DB error.',
-
         'input_not_changed' => '#Field is not changed.',
+
         'username:used' => '#Username is used already.',
         'email:used' => '#Email is used already.',
 
+        // USER
         'user:not_logged_in' => '#User is not logged in.',
         'user:not_found' => '#User is not found.',
         'user:not_active' => '#User is not activated.',
