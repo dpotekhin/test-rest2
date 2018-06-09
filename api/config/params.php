@@ -18,14 +18,16 @@ return [
     'api.confirmNeededToLogin' => false, // TODO: it needs to be done
 
     'api.authWithToken' => false, // TODO: it needs to be done
-    'api.confirmEmailAfterReg' => true, // Need to confirm email after registration
+    'api.emailConfirmRequired' => true, // Need to confirm email after registration
 
     'api.passwordMinLength' => 6, //
     'api.passwordMaxLength' => 20, //
+    'api.no_changes' => '#There`s nothing to change.' , //
 
 
     // SEND MAIL SETTINGS
-    'mail.sendOnRegister' => true,
+    'mail.sendOnRegister' => true, //
+    'mail.sendOnEdit' => true, //
 
 
     // LOCALS
@@ -50,6 +52,7 @@ return [
 
         'db:error' => '#DB error.',
 
+        'input_not_changed' => '#Field is not changed.',
         'username:used' => '#Username is used already.',
         'email:used' => '#Email is used already.',
 
